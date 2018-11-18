@@ -9,7 +9,7 @@
     before it writes the PHP output into the content.
 
     @package urlaube\phpexec
-    @version 0.1a0
+    @version 0.1a1
     @author  Yahe <hello@yahe.sh>
     @since   0.1a0
   */
@@ -23,21 +23,46 @@
 
     // CONSTANTS
 
+    const CONSTANT  = "constant";
     const EXTENSION = ".php";
     const FILENAME  = "filename";
 
     const PHP    = "~\[php (?P<filename>[^\]]+)\]~";
     const PHPRAW = "~\[php\:raw (?P<filename>[^\]]+)\]~";
 
+    const PLACEHOLDER = "~\{\%(?P<constant>[^\}]+)\}~";
+
     // HELPER FUNCTIONS
+
+    protected static function getConstant($matches) {
+      $result = null;
+
+      // check if the constant name is set
+      if (isset($matches[static::CONSTANT])) {
+        $constant = $matches[static::CONSTANT];
+
+        if (defined($constant)) {
+          $result = constant($constant);
+        }
+      }
+
+      return $result;
+    }
 
     protected static function getContent($matches, $raw = false) {
       $result = null;
 
       // check if the filename is set
       if (isset($matches[static::FILENAME])) {
+        $filename = $matches[static::FILENAME];
+
+        // replace placeholder with PHP constant
+        $filename = preg_replace_callback(static::PLACEHOLDER,
+                                          function ($matches) { return static::getConstant($matches, false); },
+                                          $filename);
+
         // fix $filename
-        $filename = realpath($matches[static::FILENAME]);
+        $filename = realpath($filename);
 
         // check if the file name ends with .php and is referencing an existing file
         if (istrail($filename, static::EXTENSION) && is_file($filename)) {
@@ -68,10 +93,14 @@
 
       if (is_string($result)) {
         // replace shortcode with PHP output
-        $result = preg_replace_callback(static::PHP, function ($matches) { return static::getContent($matches, false); }, $result);
+        $result = preg_replace_callback(static::PHP,
+                                        function ($matches) { return static::getContent($matches, false); },
+                                        $result);
 
         // replace shortcode with raw PHP output
-        $result = preg_replace_callback(static::PHPRAW, function ($matches) { return static::getContent($matches, true); }, $result);
+        $result = preg_replace_callback(static::PHPRAW,
+                                        function ($matches) { return static::getContent($matches, true); },
+                                        $result);
       }
 
       return $result;
